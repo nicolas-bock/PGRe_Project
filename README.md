@@ -15,11 +15,11 @@
    ```
 
 3. **Run CMake to generate a buildsystem**
-  ```bash
-  cmake ..
-  ```
+   ```bash
+   cmake ..
+   ```
 
-4. **Build and run the project using the make build system**
+5. **Build and run the project using the make build system**
    ```bash
    make -j8 && make run
    ```
