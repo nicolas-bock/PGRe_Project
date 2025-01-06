@@ -361,7 +361,7 @@ int main(int argc, char *argv[]) {
     std::vector<unsigned int> indices;
     std::unordered_map<std::string, GLuint> textures;
     try {
-        loadOBJ(ROOT_DIR "/models/Simple_Piano/Piano.obj", ROOT_DIR "/models/Simple_Piano", vertices, normals, texcoords, indices, textures);
+        loadOBJ(ROOT_DIR "/models/Piano.obj", ROOT_DIR "/models", vertices, normals, texcoords, indices, textures);
         // loadOBJ(ROOT_DIR "/models/cube.obj", ROOT_DIR "/models", vertices, normals, texcoords, indices, textures);
     } catch (const std::exception &e) {
         std::cerr << "Error loading OBJ: " << e.what() << std::endl;
