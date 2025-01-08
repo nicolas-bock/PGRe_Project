@@ -33,6 +33,7 @@ void bind_element_buffers(std::vector<float> vertices, std::vector<unsigned int>
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), &vertices[0], GL_STATIC_DRAW);
+    
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
@@ -42,8 +43,6 @@ void bind_element_buffers(std::vector<float> vertices, std::vector<unsigned int>
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); // Texture coordinates
     glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
 
     glBindVertexArray(vao);
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
@@ -116,17 +115,14 @@ void loadOBJ(const std::string &path, const std::string &mtlBaseDir, std::vector
                 normals.push_back(attrib.normals[3 * index.normal_index + 1]);
                 normals.push_back(attrib.normals[3 * index.normal_index + 2]);
             } else {
-                normals.push_back(0.0f);
-                normals.push_back(0.0f);
-                normals.push_back(0.0f);
+                normals.insert(normals.end(), { 0.0f, 0.0f, 0.0f });
             }
 
             if (!attrib.texcoords.empty()) {
                 texcoords.push_back(attrib.texcoords[2 * index.texcoord_index + 0]);
                 texcoords.push_back(attrib.texcoords[2 * index.texcoord_index + 1]);
             } else {
-                texcoords.push_back(0.0f);
-                texcoords.push_back(0.0f);
+                texcoords.insert(texcoords.end(), { 0.0f, 0.0f });
             }
 
 
@@ -144,15 +140,25 @@ void loadOBJ(const std::string &path, const std::string &mtlBaseDir, std::vector
 
             if (data) {
                 GLuint textureID;
+                // 
+                // glGenTextures(1, &textureID);
+                // glBindTexture(GL_TEXTURE_2D, textureID);
+                // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+                // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                //
                 glCreateTextures(GL_TEXTURE_2D,1,&textureID);
                 glTextureStorage2D(textureID,1,GL_RGB8,width,height);
                 glPixelStorei(GL_UNPACK_ROW_LENGTH,width);
-                glPixelStorei(GL_UNPACK_ALIGNMENT ,1);
+                glPixelStorei(GL_UNPACK_ALIGNMENT,1);
                 glTextureSubImage2DEXT(textureID,GL_TEXTURE_2D,0,0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE,data);
                 glTextureParameteri(textureID,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
                 glTextureParameteri(textureID,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
 
                 textures[material.name] = textureID;
+                //
+                // stbi_image_free(data);
+                //
             } else {
                 std::cerr << "Failed to load texture: " << texturePath << std::endl;
             }
@@ -358,11 +364,13 @@ int main(int argc, char *argv[]) {
     std::vector<float> vertices;
     std::vector<float> normals;
     std::vector<float> texcoords;
-    std::vector<unsigned int> indices;
+    std::vector<uint32_t> indices;
     std::unordered_map<std::string, GLuint> textures;
+    // GLuint tex; 
+
     try {
-        loadOBJ(ROOT_DIR "/models/Piano.obj", ROOT_DIR "/models", vertices, normals, texcoords, indices, textures);
-        // loadOBJ(ROOT_DIR "/models/cube.obj", ROOT_DIR "/models", vertices, normals, texcoords, indices, textures);
+        loadOBJ(ROOT_DIR "/models/Simple_Piano/Joined_piano.obj", ROOT_DIR "/models/Simple_Piano", vertices, normals, texcoords, indices, textures);
+        // loadOBJ(ROOT_DIR "/models/Simple_Piano/Piano.obj", ROOT_DIR "/models/Simple_Piano", vertices, normals, texcoords, indices, textures);
     } catch (const std::exception &e) {
         std::cerr << "Error loading OBJ: " << e.what() << std::endl;
         return -1;
@@ -434,20 +442,6 @@ int main(int argc, char *argv[]) {
 
     glVertexArrayElementBuffer(vao, ebo);
 
-    // Unique pyramids texture
-    /*********************************************/
-    // int x,y,n;
-    // auto texData = stbi_load(ROOT_DIR "/resources/Pyramids_of_Giza.jpg",&x,&y,&n,0);
-    // GLuint tex;
-    // glCreateTextures(GL_TEXTURE_2D,1,&tex);
-    // glTextureStorage2D(tex,1,GL_RGB8,x,y);
-    // glPixelStorei(GL_UNPACK_ROW_LENGTH,x);
-    // glPixelStorei(GL_UNPACK_ALIGNMENT ,1);
-    // glTextureSubImage2DEXT(tex,GL_TEXTURE_2D,0,0,0,x,y,GL_RGB,GL_UNSIGNED_BYTE,texData);
-    // glTextureParameteri(tex,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-    // glTextureParameteri(tex,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-    /*********************************************/
-
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -488,6 +482,8 @@ int main(int argc, char *argv[]) {
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        glUseProgram(prg);
+
         glProgramUniform1f(prg,iTimeLocation, iTime);
         glProgramUniform1f(prg,aspectLocation, (float)width/height);
 
@@ -497,14 +493,12 @@ int main(int argc, char *argv[]) {
 
         render_scene_walls(); // renders walls, floor and ceiling from scene.h
 
-        glUseProgram(prg);
         glBindVertexArray(vao);
         auto texID = 0;
         for (const auto& texture : textures) {
             glBindTextureUnit(texID, texture.second);
             texID++;
         }
-        // glBindTextureUnit(0, tex); // unique pyramids texture
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 
         // Light and shadow
