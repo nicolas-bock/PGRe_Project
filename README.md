@@ -57,7 +57,7 @@ This project is a 3D rendering of a grand piano implemented in C++ using **OpenG
 
 ## Controls
 Use your mouse to move the scene:
-⦁	Press and hold the ``Right-Button`` to move the scene in the x and y axis (all around the piano).
-⦁	Press and hold the ``Scroll-Button`` to get closer to or further from the center of the scene.
-⦁	Press and hold the ``Left-Button`` to move the light source, up and down, or left and right, by moving the mouse in the same directions.
-⦁	Press ``F1`` to switch the light on/off.
+* Press and hold the ``Right-Button`` to move the scene in the x and y axis (all around the piano).
+* Press and hold the ``Scroll-Button`` to get closer to or further from the center of the scene.
+* Press and hold the ``Left-Button`` to move the light source, up and down, or left and right, by moving the mouse in the same directions.
+* Press ``F1`` to switch the light on/off.
