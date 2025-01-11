@@ -1,0 +1,62 @@
+# Blender 4.3.0 MTL File: 'Piano_Project.blend'
+# www.blender.org
+
+newmtl BWhite_Key
+Ns 6.694221
+Ka 1.000000 1.000000 1.000000
+Ks 0.420000 0.420000 0.420000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+illum 2
+map_Kd ivoire.png
+map_d ivoire.png
+
+newmtl Black_Key
+Ns 6.112403
+Ka 1.000000 1.000000 1.000000
+Ks 0.100000 0.100000 0.100000
+Ke 0.000000 0.000000 0.000000
+Ni 2.100000
+illum 2
+map_Kd black_wood.png
+map_d black_wood.png
+
+newmtl Gold
+Ns 490.000000
+Ka 0.940000 0.940000 0.940000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 3.000000
+illum 3
+map_Kd gold.png
+map_d gold.png
+
+newmtl Wood_box
+Ns 16.501204
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.100000
+illum 2
+map_Kd wood_style.png
+map_d wood_style.png
+
+newmtl Wood_dark
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+illum 2
+map_Kd brown_wood.png
+map_d brown_wood.png
+
+newmtl red_wool
+Ns 0.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_Kd red_wool.jpg
+map_d red_wool.jpg
