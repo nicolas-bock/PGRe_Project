@@ -27,15 +27,14 @@ using namespace ge::gl;
 const char* texVSSrc = R".(
 #version 420
 
+layout(location=0)in vec2 position;
+layout(location=1)in vec2 texcoord;
+
 out vec2 vCoord;
 
 void main(){
-    if(gl_VertexID==0)gl_Position = vec4(0,0,0,1);
-    if(gl_VertexID==1)gl_Position = vec4(1,0,0,1);
-    if(gl_VertexID==2)gl_Position = vec4(0,1,0,1);
-    if(gl_VertexID==3)gl_Position = vec4(1,1,0,1);
-
-    vCoord = gl_Position.xy;
+    vCoord = texcoord;
+    gl_Position = vec4(position,0,1);
 }
 ).";
 
@@ -43,6 +42,7 @@ const char* texFSSrc = R".(
 #version 420
 
 in vec2 vCoord;
+
 layout(binding=0)uniform sampler2D tex;
 
 out vec4 fColor;
@@ -157,8 +157,15 @@ uniform vec3 viewPos;
 uniform sampler2D shadowMap;
 uniform mat4 lightSpaceMatrix;
 
+uniform vec3 albedo;
+uniform float metallic;
+uniform float roughness;
+uniform float ao;
+
 uniform float scaleX;
 uniform float scaleY;
+
+uniform bool add_fresnel;
 
 out vec4 fColor;
 
@@ -177,8 +184,8 @@ float ShadowCalculation(vec4 fragPosLightSpace, vec3 lightDir) {
     // Percentage Closer Filtering (PCF)
     float shadow = 0.0;
     float bias = max(0.05 * (1.0 - dot(vNormal, lightDir)), 0.005);
-    int samples = 4;   // Number of samples (try increasing this for smoother shadows)
-    float offset = 1.0 / 2048.0; // Shadow map texel size (adjust based on shadow map resolution)
+    int samples = 4;
+    float offset = 1.0 / 2048.0;
 
     for (int x = -samples; x <= samples; ++x) {
         for (int y = -samples; y <= samples; ++y) {
@@ -196,7 +203,7 @@ void main() {
     vec3 objectColor = texture(diffuseTexture, vTexcoord).rgb;
 
     // Ambient lighting
-    float ambientStrength = 0.6;
+    float ambientStrength = 0.7;
     vec3 ambient = ambientStrength * lightColor;
 
     // Diffuse lighting
@@ -210,13 +217,41 @@ void main() {
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
     vec3 specular = spec * lightColor;
 
+    // Reflection
+    vec3 I = normalize(FragPos - lightPos);
+    vec3 R = reflect(I, vNormal);
+    vec3 E = normalize(FragPos - viewPos);
+    float fresnel = 0.1 + 0.9 * pow(1.0 - dot(E, R), 5.0);
+    vec3 F0 = vec3(0.04);
+    vec3 F = F0 + (1.0 - F0) * fresnel;
+    float NdotL = max(dot(vNormal, lightDir), 0.0);
+    float NdotV = max(dot(vNormal, viewDir), 0.0);
+    float NdotH = max(dot(vNormal, normalize(lightDir + viewDir)), 0.0);
+    float roughnessSq = roughness * roughness;
+    float D = exp((NdotH * NdotH - 1.0) / (roughnessSq * NdotH * NdotH)) / (3.14159265 * roughnessSq * NdotH * NdotH * NdotH * NdotH);
+    float G = min(1.0, min(2.0 * NdotH * NdotV / NdotH, 2.0 * NdotH * NdotL / NdotH));
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
+    kS *= metallic;
+    vec3 numerator = D * G * kS;
+    float denominator = 4.0 * max(NdotL, 0.001) * max(NdotV, 0.001);
+    vec3 specularReflection = numerator / denominator;
+
     // Calculate shadow
     vec4 fragPosLightSpace = lightSpaceMatrix * vec4(FragPos, 1.0);
     float shadow = ShadowCalculation(fragPosLightSpace, lightDir);
 
     vec3 indirectAmbient = ambientStrength * lightColor * (0.5 + 0.5 * vNormal.y);
+    vec3 lighting = ambient + indirectAmbient + (1.0 - shadow);
 
-    vec3 lighting = (ambient + indirectAmbient + (1.0 - shadow) * (diffuse + specular)) * objectColor;
+    if(add_fresnel) {
+        lighting *= (diffuse + specular + specularReflection) * objectColor;
+        lighting += fresnel * objectColor;
+    } else {
+        lighting *= (diffuse + specular) * objectColor;
+    }
+
     vec4 textureColor = texture(diffuseTexture, vTexcoord * vec2(scaleX, scaleY));
     fColor = textureColor * vec4(lighting, 1.0);
 }
@@ -292,6 +327,7 @@ void render_scene_walls() {
     bind_element_buffers(pedestalVertices, pedestalIndices);
 }
 
+
 void loadOBJ(const std::string &path, const std::string &mtlBaseDir, std::vector<float> &vertices, std::vector<float> &normals, std::vector<float> &texcoords, std::vector<unsigned int> &indices, std::unordered_map<std::string, GLuint> &textures) {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
@@ -337,13 +373,17 @@ void loadOBJ(const std::string &path, const std::string &mtlBaseDir, std::vector
             // std::cerr << "Loaded texture: " << texturePath << " " << width << "x" << height << "x" << channels << std::endl;
 
             if (data) {
-                GLuint textureID;
-                glActiveTexture(GL_TEXTURE0 + i);
+                GLuint textureID = i;
+                glGenTextures(1, &textureID);
                 glBindTexture(GL_TEXTURE_2D, textureID);
-                glTextureStorage2D(textureID,1,GL_RGB8,width,height);
-                glTextureSubImage2DEXT(textureID,GL_TEXTURE_2D,0,0,0,width,height,GL_RGB,GL_UNSIGNED_BYTE,data);
-                glTextureParameteri(textureID,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-                glTextureParameteri(textureID,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+
+                GLenum format = (channels == 3) ? GL_RGB : GL_RGBA;
+                glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
                 i++;
                 textures[material.name] = textureID;
@@ -383,11 +423,6 @@ int main(int argc, char *argv[]) {
 
     auto window = SDL_CreateWindow("Piano", 0, 0, windowWidth, windowHeight, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 
-    float originalX = 1080.0f;
-    float originalY = 1080.0f;
-    float scaledX = originalX * scaleX;
-    float scaledY = originalY * scaleY;
-
     auto context = SDL_GL_CreateContext(window);
 
     bool running = true;
@@ -396,8 +431,6 @@ int main(int argc, char *argv[]) {
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    // glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 
@@ -441,6 +474,13 @@ int main(int argc, char *argv[]) {
     GLuint viewPosLocation = glGetUniformLocation(prg, "viewPos");
     GLuint lightSpaceMatrixLocation = glGetUniformLocation(prg, "lightSpaceMatrix");
     GLuint shadowMapLocation = glGetUniformLocation(prg, "shadowMap");
+    GLuint addFresnelLocation = glGetUniformLocation(prg, "add_fresnel");
+
+    GLuint albedoLocation = glGetUniformLocation(prg, "albedo");
+    GLuint metallicLocation = glGetUniformLocation(prg, "metallic");
+    GLuint roughnessLocation = glGetUniformLocation(prg, "roughness");
+    GLuint aoLocation = glGetUniformLocation(prg, "ao");
+
 
     glm::vec3 lightPos(0.0f, 10.0f, 0.0f);
     glm::vec3 viewPos(0.0f, 0.0f, 0.0f);
@@ -477,13 +517,11 @@ int main(int argc, char *argv[]) {
     glEnableVertexAttribArray(2);
 
     glVertexArrayElementBuffer(vao, ebo);   
-
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_2D);
    
     bool add_texture = true;
+    bool light_on = true;
+    bool phantom = false;
+    bool add_fresnel = false;
 
     while (running) {
         SDL_Event event;
@@ -509,7 +547,7 @@ int main(int argc, char *argv[]) {
                 if(event.motion.state & SDL_BUTTON_LMASK){ // Left mouse button: move light
                     lightPos.x -= event.motion.xrel * 0.1f;
                     lightPos.y -= event.motion.yrel * 0.1f;
-                    lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 20.0f);
+                    lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 10.0f, 200.0f);
                     lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
                     lightSpaceMatrix = lightProjection * lightView;
                 }
@@ -517,8 +555,14 @@ int main(int argc, char *argv[]) {
             if(event.type == SDL_KEYDOWN){
                 if(event.key.keysym.sym == SDLK_ESCAPE) // Close window
                     running = false;
-                if(event.key.keysym.sym == SDLK_F1) // Switch light on/off
+                if(event.key.keysym.sym == SDLK_F1) // Add/remove texture
                     add_texture = !add_texture;
+                if(event.key.keysym.sym == SDLK_F2) // Switch light on/off
+                    light_on = !light_on;
+                if(event.key.keysym.sym == SDLK_F3) // Phantom mode
+                    phantom = !phantom;
+                if(event.key.keysym.sym == SDLK_F4) // Fresnel effect
+                    add_fresnel = !add_fresnel;
             }
         }
 
@@ -542,6 +586,8 @@ int main(int argc, char *argv[]) {
         glProgramUniformMatrix4fv(prg, viewLocation, 1, GL_FALSE, (float*)&view);
         glProgramUniformMatrix4fv(prg, projLocation, 1, GL_FALSE, (float*)&proj);
         glProgramUniformMatrix4fv(prg, modelLocation, 1, GL_FALSE, (float*)&model);
+        glProgramUniformMatrix4fv(prg, lightSpaceMatrixLocation, 1, GL_FALSE, (float*)&lightSpaceMatrix);
+        glProgramUniform1i(prg, addFresnelLocation, add_fresnel);
 
         // renders walls, floor and ceiling from scene.h
         render_scene_walls();
@@ -549,7 +595,7 @@ int main(int argc, char *argv[]) {
         // render piano model
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-        
+
         // render textures
         if(add_texture) {
             auto texID = 0;
@@ -557,17 +603,33 @@ int main(int argc, char *argv[]) {
                 glBindTextureUnit(texID, texture.second);
                 texID++;
             }
-        } if(!add_texture) {
+        } else if(!add_texture) {
             glBindTextureUnit(0, 0);
         }
         //
 
         // Light and shadow
+        if(phantom) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        } else if(light_on) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        } else if(!light_on) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+
         glUniform3fv(lightPosLocation, 1, glm::value_ptr(lightPos));
         glUniform3fv(viewPosLocation, 1, glm::value_ptr(viewPos));
         glUniformMatrix4fv(lightSpaceMatrixLocation, 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
         glUniform1i(shadowMapLocation, 0);
         //
+
+        glUniform3f(albedoLocation, 0.5f, 0.5f, 0.5f);
+        glUniform1f(metallicLocation, 0.5f);
+        glUniform1f(roughnessLocation, 0.5f);
+        glUniform1f(aoLocation, 1.0f);
 
         // glUseProgram(texPRG);
        
