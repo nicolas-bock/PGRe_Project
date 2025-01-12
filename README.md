@@ -61,3 +61,4 @@ Use your mouse to move the scene:
 * Press and hold the ``Scroll-Button`` to get closer to or further from the center of the scene.
 * Press and hold the ``Left-Button`` to move the light source, up and down, or left and right, by moving the mouse in the same directions.
 * Press ``F1`` to switch the light on/off.
+* Press ``Escape`` to close the window.
